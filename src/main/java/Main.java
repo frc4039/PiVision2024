@@ -25,6 +25,7 @@ import edu.wpi.first.networktables.NetworkTableEvent;
 import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.vision.VisionPipeline;
 import edu.wpi.first.vision.VisionThread;
+import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
 import org.opencv.core.Mat;
@@ -305,7 +306,7 @@ public final class Main {
     }
   }
 */
-
+private static int threadCounter = 0;
   /**
    * Main.
    */
@@ -314,7 +315,9 @@ public final class Main {
       configFile = args[0];
     }
     
-    System.err.println("Hello World"); 
+    //initialize counter and timer
+   long startTime = System.currentTimeMillis();
+  
 
     // read configuration
     if (!readConfig()) {
@@ -342,7 +345,7 @@ public final class Main {
     for (SwitchedCameraConfig config : switchedCameraConfigs) {
       startSwitchedCamera(config);
     }
-    CvSource outputStream = CameraServer.putVideo("DetectedObject", 640, 480);
+    CvSource outputStream = CameraServer.putVideo("DetectedObject", 640, 420);
     // start image processing on camera 0 if present
     if (cameras.size() >= 1) {
       VisionThread visionThread = new VisionThread(cameras.get(0),
@@ -396,17 +399,21 @@ public final class Main {
         SmartDashboard.putNumber("/PI/Detected Object/height", -1);
         SmartDashboard.putNumber("/PI/Detected Object/area", -1);
         }
- 
+
+        threadCounter++;
+        SmartDashboard.putNumber("/PI/Detected Object/Iterations", threadCounter);
+       if ((System.currentTimeMillis() - startTime)/1000 > 0){
+        SmartDashboard.putNumber("/PI/Detected Object/ThreadsperSecond", threadCounter/((System.currentTimeMillis() - startTime)/1000));
+       }
       });
       visionThread.start();
-
-
+     
     }
 
     // loop forever
     for (;;) {
       try {
-        Thread.sleep(1000);
+        Thread.sleep(10000);
       } catch (InterruptedException ex) {
         return;
       }
