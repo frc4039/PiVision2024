@@ -96,14 +96,162 @@ public final class Main {
     public String key;
   };
 
-  public static int team;
+  public static int team = 4039;
   public static boolean server;
   public static List<CameraConfig> cameraConfigs = new ArrayList<>();
   public static List<SwitchedCameraConfig> switchedCameraConfigs = new ArrayList<>();
   public static List<VideoSource> cameras = new ArrayList<>();
 
+  private static int threadCounter = 0;
+  private static long threadCounterTime = 0;
+  private static long elapsedThreadTime = 0;
+  private static long startTime;
+
+
   private Main() {
     
+  }
+
+/**
+   * Example pipeline.
+   
+  public static class MyPipeline implements VisionPipeline {
+    public int val;
+
+    @Override
+    public void process(Mat mat) {
+      val += 1;
+    }
+  }
+*/
+
+  /*** Main ***/
+  public static void main(String... args) {
+    if (args.length > 0) {
+      configFile = args[0];
+    }
+    
+    //initialize counter and timer
+   startTime = System.currentTimeMillis();
+  
+    // read configuration
+    if (!readConfig()) {
+      return;
+    }
+
+    // start NetworkTables
+    NetworkTableInstance ntinst = NetworkTableInstance.getDefault();
+    if (server) {
+      System.out.println("Setting up NetworkTables server");
+      ntinst.startServer();
+    } else {
+      System.out.println("Setting up NetworkTables client for team " + team);
+      ntinst.startClient4("wpilibpi");
+      ntinst.setServerTeam(team);
+      ntinst.startDSClient();
+    }
+
+    // start cameras
+    for (CameraConfig config : cameraConfigs) {
+      cameras.add(startCamera(config));
+    }
+
+    // start switched cameras
+    for (SwitchedCameraConfig config : switchedCameraConfigs) {
+      startSwitchedCamera(config);
+    }
+    CvSource outputStream = CameraServer.putVideo("DetectedObjectFeed", 320, 240);
+    // start image processing on camera 0 if present
+    if (cameras.size() >= 1) {
+      VisionThread visionThread = new VisionThread(cameras.get(0),
+  //            new GreenBinGripPL(), pipeline -> {
+            new NoteGripPipeline(), pipeline -> {
+    
+        // do something with pipeline results
+        Mat currentFrame = pipeline.maskOutput();
+        startTime = System.currentTimeMillis();
+        
+        if (!pipeline.filterContoursOutput().isEmpty()) {
+
+          int largestContourIndex = 0;
+          float largestContourArea = 0;
+          int currentIndex = 0;
+  
+          // Loop through all detected object contours and select the one with the largest area as our main target
+          for (MatOfPoint matOfPoint : pipeline.filterContoursOutput()) {
+            int currentContourArea = Imgproc.boundingRect(matOfPoint).height * Imgproc.boundingRect(matOfPoint).width;
+  
+            if (currentContourArea > largestContourArea) {
+              largestContourIndex = currentIndex;
+              largestContourArea = currentContourArea;
+            }
+            currentIndex++;
+          }
+  
+          Rect r = Imgproc.boundingRect(pipeline.filterContoursOutput().get(largestContourIndex));
+  
+  
+          int centerX = r.x + (r.width/2);
+          int centerY = r.y + (r.height/2);
+   
+          
+          Imgproc.rectangle(currentFrame, r, new Scalar(0, 255,0),5);
+          Imgproc.drawContours(currentFrame, pipeline.filterContoursOutput(), largestContourIndex, new Scalar(255, 0, 0));
+
+                  //Update Shuffleboard
+        outputStream.putFrame(currentFrame);
+        SmartDashboard.putNumber("/PI/Detected Object/xCenter", centerX);
+        SmartDashboard.putNumber("/PI/Detected Object/yCenter", centerY);
+        SmartDashboard.putNumber("/PI/Detected Object/width", r.width);
+        SmartDashboard.putNumber("/PI/Detected Object/height", r.height);
+        SmartDashboard.putNumber("/PI/Detected Object/area", r.height*r.width);
+        SmartDashboard.putNumber("/PI/Detected Object/Angle", -1);
+
+        } 
+        else{
+          Imgproc.putText(currentFrame, "No Note detected!!!", new Point(100, 50), 0, 1.0, new Scalar(0, 0, 255), 3);
+        //Update Shuffleboard
+        outputStream.putFrame(currentFrame);
+        SmartDashboard.putNumber("/PI/Detected Object/xCenter", -1);
+        SmartDashboard.putNumber("/PI/Detected Object/yCenter", -1);
+        SmartDashboard.putNumber("/PI/Detected Object/width", -1);
+        SmartDashboard.putNumber("/PI/Detected Object/height", -1);
+        SmartDashboard.putNumber("/PI/Detected Object/area", -1);
+        SmartDashboard.putNumber("/PI/Detected Object/Angle", -1);
+        }
+
+
+        // Calculate Threads per Second
+        threadCounter++;
+        elapsedThreadTime = (System.currentTimeMillis() - startTime);
+        threadCounterTime = threadCounterTime + elapsedThreadTime;
+        if (threadCounterTime < 1) elapsedThreadTime = 1;  // fix divide by 0 below  
+        SmartDashboard.putNumber("/PI/Detected Object/Iterations", threadCounter);
+        SmartDashboard.putNumber("/PI/Detected Object/ThreadCounterTime", threadCounterTime);
+        SmartDashboard.putNumber("/PI/Detected Object/ThreadsperSecond", threadCounter/threadCounterTime*1000);
+        SmartDashboard.putNumber("/PI/Detected Object/MilliSecondsPerThread", elapsedThreadTime);
+       
+
+       //reset counter every 100 cycles
+       if (threadCounter > 100){
+        threadCounter = 0;
+        threadCounterTime = 0;
+       }
+         
+      });
+
+      visionThread.start();
+     
+    }
+
+    // loop forever
+    for (;;) {
+      try {
+        Thread.sleep(10000);
+      } catch (InterruptedException ex) {
+        return;
+      }
+    }
   }
 
   /**
@@ -294,129 +442,4 @@ public final class Main {
     return server;
   }
 
-  /**
-   * Example pipeline.
-   
-  public static class MyPipeline implements VisionPipeline {
-    public int val;
-
-    @Override
-    public void process(Mat mat) {
-      val += 1;
-    }
-  }
-*/
-private static int threadCounter = 0;
-  /**
-   * Main.
-   */
-  public static void main(String... args) {
-    if (args.length > 0) {
-      configFile = args[0];
-    }
-    
-    //initialize counter and timer
-   long startTime = System.currentTimeMillis();
-  
-
-    // read configuration
-    if (!readConfig()) {
-      return;
-    }
-
-    // start NetworkTables
-    NetworkTableInstance ntinst = NetworkTableInstance.getDefault();
-    if (server) {
-      System.out.println("Setting up NetworkTables server");
-      ntinst.startServer();
-    } else {
-      System.out.println("Setting up NetworkTables client for team " + team);
-      ntinst.startClient4("wpilibpi");
-      ntinst.setServerTeam(team);
-      ntinst.startDSClient();
-    }
-
-    // start cameras
-    for (CameraConfig config : cameraConfigs) {
-      cameras.add(startCamera(config));
-    }
-
-    // start switched cameras
-    for (SwitchedCameraConfig config : switchedCameraConfigs) {
-      startSwitchedCamera(config);
-    }
-    CvSource outputStream = CameraServer.putVideo("DetectedObject", 640, 420);
-    // start image processing on camera 0 if present
-    if (cameras.size() >= 1) {
-      VisionThread visionThread = new VisionThread(cameras.get(0),
-              new GreenBinGripPL(), pipeline -> {
-        // do something with pipeline results
-        Mat currentFrame = pipeline.maskOutput();
-
-        if (!pipeline.filterContoursOutput().isEmpty()) {
-
-          int largestContourIndex = 0;
-          float largestContourArea = 0;
-          int currentIndex = 0;
-  
-          // Loop through all detected object contours and select the one with the largest area as our main target
-          for (MatOfPoint matOfPoint : pipeline.filterContoursOutput()) {
-            int currentContourArea = Imgproc.boundingRect(matOfPoint).height * Imgproc.boundingRect(matOfPoint).width;
-  
-            if (currentContourArea > largestContourArea) {
-              largestContourIndex = currentIndex;
-              largestContourArea = currentContourArea;
-            }
-            currentIndex++;
-          }
-  
-          Rect r = Imgproc.boundingRect(pipeline.filterContoursOutput().get(largestContourIndex));
-  
-  
-          int centerX = r.x + (r.width/2);
-          int centerY = r.y + (r.height/2);
-   
-          
-          Imgproc.rectangle(currentFrame, r, new Scalar(0, 255,0),5);
-          Imgproc.drawContours(currentFrame, pipeline.filterContoursOutput(), largestContourIndex, new Scalar(255, 0, 0));
-
-                  //Update Shuffleboard
-        outputStream.putFrame(currentFrame);
-        SmartDashboard.putNumber("/PI/Detected Object/xCenter", centerX);
-        SmartDashboard.putNumber("/PI/Detected Object/yCenter", centerY);
-        SmartDashboard.putNumber("/PI/Detected Object/width", r.width);
-        SmartDashboard.putNumber("/PI/Detected Object/height", r.height);
-        SmartDashboard.putNumber("/PI/Detected Object/area", r.height*r.width);
-
-        } 
-        else{
-          Imgproc.putText(currentFrame, "No Note detected!!!", new Point(100, 50), 0, 1.0, new Scalar(0, 0, 255), 3);
-        //Update Shuffleboard
-        outputStream.putFrame(currentFrame);
-        SmartDashboard.putNumber("/PI/Detected Object/xCenter", -1);
-        SmartDashboard.putNumber("/PI/Detected Object/yCenter", -1);
-        SmartDashboard.putNumber("/PI/Detected Object/width", -1);
-        SmartDashboard.putNumber("/PI/Detected Object/height", -1);
-        SmartDashboard.putNumber("/PI/Detected Object/area", -1);
-        }
-
-        threadCounter++;
-        SmartDashboard.putNumber("/PI/Detected Object/Iterations", threadCounter);
-       if ((System.currentTimeMillis() - startTime)/1000 > 0){
-        SmartDashboard.putNumber("/PI/Detected Object/ThreadsperSecond", threadCounter/((System.currentTimeMillis() - startTime)/1000));
-       }
-      });
-      visionThread.start();
-     
-    }
-
-    // loop forever
-    for (;;) {
-      try {
-        Thread.sleep(10000);
-      } catch (InterruptedException ex) {
-        return;
-      }
-    }
-  }
 }
