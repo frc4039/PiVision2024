@@ -107,6 +107,13 @@ public final class Main {
   private static long elapsedThreadTime = 0;
   private static long startTime;
 
+  private static enum detectionMethodEnum {
+    LOWEST,
+    LARGEST
+    //add more in future if needed
+  };
+  private static detectionMethodEnum detectionMethod = detectionMethodEnum.LOWEST;
+
 
   private Main() {
     
@@ -173,52 +180,73 @@ public final class Main {
         
         if (!pipeline.filterContoursOutput().isEmpty()) {
 
-          int largestContourIndex = 0;
-          float largestContourArea = 0;
-          int currentIndex = 0;
-  
-          // Loop through all detected object contours and select the one with the largest area as our main target
-          for (MatOfPoint matOfPoint : pipeline.filterContoursOutput()) {
-            int currentContourArea = Imgproc.boundingRect(matOfPoint).height * Imgproc.boundingRect(matOfPoint).width;
-  
-            if (currentContourArea > largestContourArea) {
-              largestContourIndex = currentIndex;
-              largestContourArea = currentContourArea;
+          if (detectionMethod == detectionMethodEnum.LARGEST){
+              int largestContourIndex = 0;
+              float largestContourArea = 0;
+              int currentIndex = 0;
+              
+              
+              // Loop through all detected object contours and select the one with the largest area as our main target
+              for (MatOfPoint matOfPoint : pipeline.filterContoursOutput()) {
+                int currentContourArea = Imgproc.boundingRect(matOfPoint).height * Imgproc.boundingRect(matOfPoint).width;
+      
+                if (currentContourArea > largestContourArea) {
+                  largestContourIndex = currentIndex;
+                  largestContourArea = currentContourArea;
+                }
+                currentIndex++;
+              }
+      
+              Rect r = Imgproc.boundingRect(pipeline.filterContoursOutput().get(largestContourIndex));
+      
+      
+              int centerX = r.x + (r.width/2);
+              int centerY = r.y + (r.height/2);
+      
+              
+              Imgproc.rectangle(currentFrame, r, new Scalar(0, 255,0),5);
+              Imgproc.drawContours(currentFrame, pipeline.filterContoursOutput(), largestContourIndex, new Scalar(255, 0, 0));
+
+                      //Update Shuffleboard
+            outputStream.putFrame(currentFrame);
+            SmartDashboard.putNumber("/PI/Detected Object/xCenter", centerX);
+            SmartDashboard.putNumber("/PI/Detected Object/yCenter", centerY);
+            SmartDashboard.putNumber("/PI/Detected Object/width", r.width);
+            SmartDashboard.putNumber("/PI/Detected Object/height", r.height);
+            SmartDashboard.putNumber("/PI/Detected Object/area", r.height*r.width);
+            SmartDashboard.putNumber("/PI/Detected Object/Angle", -1);
+
+            }else{
+              Imgproc.putText(currentFrame, "No Note detected!!!", new Point(100, 50), 0, 1.0, new Scalar(0, 0, 255), 3);
+            //Update Shuffleboard
+            outputStream.putFrame(currentFrame);
+            SmartDashboard.putNumber("/PI/Detected Object/xCenter", -1);
+            SmartDashboard.putNumber("/PI/Detected Object/yCenter", -1);
+            SmartDashboard.putNumber("/PI/Detected Object/width", -1);
+            SmartDashboard.putNumber("/PI/Detected Object/height", -1);
+            SmartDashboard.putNumber("/PI/Detected Object/area", -1);
+            SmartDashboard.putNumber("/PI/Detected Object/Angle", -1);
             }
-            currentIndex++;
+          } else if (detectionMethod == detectionMethodEnum.LOWEST) {
+              int lowestContourIndex = 0;
+              float lowestContourYValue = 8000;
+              int currentIndex = 0;
+              
+              
+              // Loop through all detected object contours and select the one with the largest area as our main target
+              for (MatOfPoint matOfPoint : pipeline.filterContoursOutput()) {
+                //int currentContourArea = Imgproc.boundingRect(matOfPoint).height * Imgproc.boundingRect(matOfPoint).width; //what currentContourYValue is based on
+                int currentContourYValue = Imgproc.boundingRect(matOfPoint).y;
+      
+                if (currentContourYValue > lowestContourYValue) {
+                  lowestContourIndex = currentIndex;
+                  lowestContourYValue = currentContourYValue;
+                }
+                currentIndex++;
+              }
           }
-  
-          Rect r = Imgproc.boundingRect(pipeline.filterContoursOutput().get(largestContourIndex));
-  
-  
-          int centerX = r.x + (r.width/2);
-          int centerY = r.y + (r.height/2);
-   
-          
-          Imgproc.rectangle(currentFrame, r, new Scalar(0, 255,0),5);
-          Imgproc.drawContours(currentFrame, pipeline.filterContoursOutput(), largestContourIndex, new Scalar(255, 0, 0));
 
-                  //Update Shuffleboard
-        outputStream.putFrame(currentFrame);
-        SmartDashboard.putNumber("/PI/Detected Object/xCenter", centerX);
-        SmartDashboard.putNumber("/PI/Detected Object/yCenter", centerY);
-        SmartDashboard.putNumber("/PI/Detected Object/width", r.width);
-        SmartDashboard.putNumber("/PI/Detected Object/height", r.height);
-        SmartDashboard.putNumber("/PI/Detected Object/area", r.height*r.width);
-        SmartDashboard.putNumber("/PI/Detected Object/Angle", -1);
-
-        } 
-        else{
-          Imgproc.putText(currentFrame, "No Note detected!!!", new Point(100, 50), 0, 1.0, new Scalar(0, 0, 255), 3);
-        //Update Shuffleboard
-        outputStream.putFrame(currentFrame);
-        SmartDashboard.putNumber("/PI/Detected Object/xCenter", -1);
-        SmartDashboard.putNumber("/PI/Detected Object/yCenter", -1);
-        SmartDashboard.putNumber("/PI/Detected Object/width", -1);
-        SmartDashboard.putNumber("/PI/Detected Object/height", -1);
-        SmartDashboard.putNumber("/PI/Detected Object/area", -1);
-        SmartDashboard.putNumber("/PI/Detected Object/Angle", -1);
-        }
+         
 
 
         // Calculate Threads per Second
