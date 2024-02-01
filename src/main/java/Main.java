@@ -104,11 +104,19 @@ public final class Main {
   private static long elapsedThreadTime = 0;
   private static long startTime;
 
+  public static int kCenterPixelOffset = 0;  // Adjust for sligtly Off Center Camera.  Positive moves the C
+  public static int kCameraXFOV = 70; // horixontal FOV of the camera in Degrees
+  public static int kCameraXResolution = 640; // horizontal resolution of image in pixels
+  
   private static enum detectionMethodEnum {
     LOWEST,
     LARGEST
     //add more in future if needed
   };
+
+  // Set the Method to choose the Object returned.
+  // LOWEST returns the Object with teh smallest Y Center
+  // LARGEST returns teh Object with the Largest Area
   private static detectionMethodEnum detectionMethod = detectionMethodEnum.LOWEST;
 
 
@@ -181,12 +189,10 @@ public final class Main {
               int currentIndex = 0;
               
           if (detectionMethod == detectionMethodEnum.LARGEST){
-
-              
+             
               // Loop through all detected object contours and select the one with the largest area as our main target
               for (MatOfPoint matOfPoint : pipeline.filterContoursOutput()) {
                 int currentContourArea = Imgproc.boundingRect(matOfPoint).height * Imgproc.boundingRect(matOfPoint).width;
-      
                 if (currentContourArea > selectedContourValue) {
                   selectedContourIndex = currentIndex;
                   selectedContourValue = currentContourArea;
@@ -198,11 +204,8 @@ public final class Main {
               selectedContourIndex = 0;
               selectedContourValue = 8000;
               currentIndex = 0;
-              
-              
-              // Loop through all detected object contours and select the one with the largest area as our main target
+              // Loop through all detected object contours and select the one with the smallest Y co-ordinate as our main target
               for (MatOfPoint matOfPoint : pipeline.filterContoursOutput()) {
-                //int currentContourArea = Imgproc.boundingRect(matOfPoint).height * Imgproc.boundingRect(matOfPoint).width; //what currentContourYValue is based on
                 int currentContourYValue = Imgproc.boundingRect(matOfPoint).y;
       
                 if (currentContourYValue > selectedContourValue) {
@@ -222,25 +225,27 @@ public final class Main {
               Imgproc.rectangle(currentFrame, r, new Scalar(0, 255,0),5);
               Imgproc.drawContours(currentFrame, pipeline.filterContoursOutput(), selectedContourIndex, new Scalar(255, 0, 0));
 
-                      //Update Shuffleboard
-            outputStream.putFrame(currentFrame);
-            SmartDashboard.putNumber("/PI/Detected Object/xCenter", centerX);
-            SmartDashboard.putNumber("/PI/Detected Object/yCenter", centerY);
-            SmartDashboard.putNumber("/PI/Detected Object/width", r.width);
-            SmartDashboard.putNumber("/PI/Detected Object/height", r.height);
-            SmartDashboard.putNumber("/PI/Detected Object/area", r.height*r.width);
-            SmartDashboard.putNumber("/PI/Detected Object/Angle", -1);
-
-            }else{
+              //Update Network Tables
+              outputStream.putFrame(currentFrame);
+              SmartDashboard.putBoolean("/PiVision/detectedNote", true);
+              SmartDashboard.putNumber("/PiVision/xCenter", centerX);
+              SmartDashboard.putNumber("/PiVision/yCenter", centerY);
+              SmartDashboard.putNumber("/PiVision/width", r.width);
+              SmartDashboard.putNumber("/PiVision/height", r.height);
+              SmartDashboard.putNumber("/PiVision/area", r.height*r.width);
+              SmartDashboard.putNumber("/PiVision/angle", (centerX-kCenterPixelOffset-(kCameraXResolution/2)) * kCameraXResolution/70);
+            }
+            else{
               Imgproc.putText(currentFrame, "No Note detected!!!", new Point(100, 50), 0, 1.0, new Scalar(0, 0, 255), 3);
-            //Update Shuffleboard
-            outputStream.putFrame(currentFrame);
-            SmartDashboard.putNumber("/PI/Detected Object/xCenter", -1);
-            SmartDashboard.putNumber("/PI/Detected Object/yCenter", -1);
-            SmartDashboard.putNumber("/PI/Detected Object/width", -1);
-            SmartDashboard.putNumber("/PI/Detected Object/height", -1);
-            SmartDashboard.putNumber("/PI/Detected Object/area", -1);
-            SmartDashboard.putNumber("/PI/Detected Object/Angle", -1);
+              //Update Shuffleboard
+              outputStream.putFrame(currentFrame);
+              SmartDashboard.putBoolean("/PiVision/detectedNote", false);
+              SmartDashboard.putNumber("/PiVision/xCenter", 0);
+              SmartDashboard.putNumber("/PiVision/yCenter", 0);
+              SmartDashboard.putNumber("/PiVision/width", 0);
+              SmartDashboard.putNumber("/PiVision/height", 0);
+              SmartDashboard.putNumber("/PiVision/area", 0); 
+              SmartDashboard.putNumber("/PiVision/angle", 0);
             }
 
           }

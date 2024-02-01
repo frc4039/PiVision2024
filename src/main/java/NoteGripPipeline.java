@@ -6,8 +6,8 @@ import java.util.List;
 import edu.wpi.first.vision.VisionPipeline;
 
 import org.opencv.core.*;
+//import org.opencv.features2d.FeatureDetector;
 import org.opencv.imgproc.*;
-
 /**
 * NoteGripPipeline class.
 *
@@ -35,7 +35,7 @@ public class NoteGripPipeline implements VisionPipeline {
 	@Override	public void process(Mat source0) {
 		// Step HSL_Threshold0:
 		Mat hslThresholdInput = source0;
-		double[] hslThresholdHue = {8.093525179856115, 51.21212121212121};
+		double[] hslThresholdHue = {8.093525179856115, 29.999999999999993};
 		double[] hslThresholdSaturation = {227.02338129496403, 255.0};
 		double[] hslThresholdLuminance = {114.65827338129496, 205.6313131313131};
 		hslThreshold(hslThresholdInput, hslThresholdHue, hslThresholdSaturation, hslThresholdLuminance, hslThresholdOutput);
@@ -60,7 +60,7 @@ public class NoteGripPipeline implements VisionPipeline {
 
 		// Step Find_Contours0:
 		Mat findContoursInput = cvDilateOutput;
-		boolean findContoursExternalOnly = false;
+		boolean findContoursExternalOnly = true;
 		findContours(findContoursInput, findContoursExternalOnly, findContoursOutput);
 
 		// Step Filter_Contours0:
