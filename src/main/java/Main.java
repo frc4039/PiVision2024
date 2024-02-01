@@ -23,9 +23,7 @@ import edu.wpi.first.cscore.CvSource;
 import edu.wpi.first.cscore.VideoSource;
 import edu.wpi.first.networktables.NetworkTableEvent;
 import edu.wpi.first.networktables.NetworkTableInstance;
-import edu.wpi.first.vision.VisionPipeline;
 import edu.wpi.first.vision.VisionThread;
-import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
 import org.opencv.core.Mat;
@@ -34,7 +32,6 @@ import org.opencv.core.Point;
 import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
 import org.opencv.imgproc.Imgproc;
-import org.opencv.imgproc.Moments;
 
 /*
    JSON format:
@@ -179,25 +176,43 @@ public final class Main {
         startTime = System.currentTimeMillis();
         
         if (!pipeline.filterContoursOutput().isEmpty()) {
-
-          if (detectionMethod == detectionMethodEnum.LARGEST){
-              int largestContourIndex = 0;
-              float largestContourArea = 0;
+              int selectedContourIndex = 0;
+              float selectedContourValue = 0;
               int currentIndex = 0;
               
+          if (detectionMethod == detectionMethodEnum.LARGEST){
+
               
               // Loop through all detected object contours and select the one with the largest area as our main target
               for (MatOfPoint matOfPoint : pipeline.filterContoursOutput()) {
                 int currentContourArea = Imgproc.boundingRect(matOfPoint).height * Imgproc.boundingRect(matOfPoint).width;
       
-                if (currentContourArea > largestContourArea) {
-                  largestContourIndex = currentIndex;
-                  largestContourArea = currentContourArea;
+                if (currentContourArea > selectedContourValue) {
+                  selectedContourIndex = currentIndex;
+                  selectedContourValue = currentContourArea;
+                }
+                currentIndex++;
+              }
+            }
+            else if (detectionMethod == detectionMethodEnum.LOWEST) {
+              selectedContourIndex = 0;
+              selectedContourValue = 8000;
+              currentIndex = 0;
+              
+              
+              // Loop through all detected object contours and select the one with the largest area as our main target
+              for (MatOfPoint matOfPoint : pipeline.filterContoursOutput()) {
+                //int currentContourArea = Imgproc.boundingRect(matOfPoint).height * Imgproc.boundingRect(matOfPoint).width; //what currentContourYValue is based on
+                int currentContourYValue = Imgproc.boundingRect(matOfPoint).y;
+      
+                if (currentContourYValue > selectedContourValue) {
+                  selectedContourIndex = currentIndex;
+                  selectedContourValue = currentContourYValue;
                 }
                 currentIndex++;
               }
       
-              Rect r = Imgproc.boundingRect(pipeline.filterContoursOutput().get(largestContourIndex));
+              Rect r = Imgproc.boundingRect(pipeline.filterContoursOutput().get(selectedContourIndex));
       
       
               int centerX = r.x + (r.width/2);
@@ -205,7 +220,7 @@ public final class Main {
       
               
               Imgproc.rectangle(currentFrame, r, new Scalar(0, 255,0),5);
-              Imgproc.drawContours(currentFrame, pipeline.filterContoursOutput(), largestContourIndex, new Scalar(255, 0, 0));
+              Imgproc.drawContours(currentFrame, pipeline.filterContoursOutput(), selectedContourIndex, new Scalar(255, 0, 0));
 
                       //Update Shuffleboard
             outputStream.putFrame(currentFrame);
@@ -227,23 +242,7 @@ public final class Main {
             SmartDashboard.putNumber("/PI/Detected Object/area", -1);
             SmartDashboard.putNumber("/PI/Detected Object/Angle", -1);
             }
-          } else if (detectionMethod == detectionMethodEnum.LOWEST) {
-              int lowestContourIndex = 0;
-              float lowestContourYValue = 8000;
-              int currentIndex = 0;
-              
-              
-              // Loop through all detected object contours and select the one with the largest area as our main target
-              for (MatOfPoint matOfPoint : pipeline.filterContoursOutput()) {
-                //int currentContourArea = Imgproc.boundingRect(matOfPoint).height * Imgproc.boundingRect(matOfPoint).width; //what currentContourYValue is based on
-                int currentContourYValue = Imgproc.boundingRect(matOfPoint).y;
-      
-                if (currentContourYValue > lowestContourYValue) {
-                  lowestContourIndex = currentIndex;
-                  lowestContourYValue = currentContourYValue;
-                }
-                currentIndex++;
-              }
+
           }
 
          
@@ -253,7 +252,7 @@ public final class Main {
         threadCounter++;
         elapsedThreadTime = (System.currentTimeMillis() - startTime);
         threadCounterTime = threadCounterTime + elapsedThreadTime;
-        if (threadCounterTime < 1) elapsedThreadTime = 1;  // fix divide by 0 below  
+        if (threadCounterTime < 1) threadCounterTime = 1;  // fix divide by 0 below  
         SmartDashboard.putNumber("/PI/Detected Object/Iterations", threadCounter);
         SmartDashboard.putNumber("/PI/Detected Object/ThreadCounterTime", threadCounterTime);
         SmartDashboard.putNumber("/PI/Detected Object/ThreadsperSecond", threadCounter/threadCounterTime*1000);
