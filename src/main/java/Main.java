@@ -248,15 +248,18 @@ public final class Main {
         
 
           // Calculate Threads per Second
-          threadCounter++;
-          elapsedThreadTime = (System.currentTimeMillis() - startTime);
-          threadCounterTime = threadCounterTime + elapsedThreadTime;
-          if (threadCounterTime < 1) threadCounterTime = 1;  // fix divide by 0 below  
-          SmartDashboard.putNumber("/PiVision/CurrentTime", System.currentTimeMillis());
-          SmartDashboard.putNumber("/PiVision/Iterations", threadCounter);
-          SmartDashboard.putNumber("/PiVision/ThreadCounterTime", threadCounterTime);
-          SmartDashboard.putNumber("/PiVision/ThreadsperSecond", threadCounter/threadCounterTime*1000);
-          SmartDashboard.putNumber("/PiVision/MilliSecondsPerThread", elapsedThreadTime);
+        threadCounter++;
+        elapsedThreadTime = (System.currentTimeMillis() - startTime);
+        threadCounterTime = threadCounterTime + elapsedThreadTime;
+        if (threadCounterTime < 1) elapsedThreadTime = 1;  // fix divide by 0 below  
+        SmartDashboard.putNumber("/PI/Detected Object/Iterations", threadCounter);
+        SmartDashboard.putNumber("/PI/Detected Object/ThreadCounterTime", threadCounterTime);
+        if (threadCounterTime != 0) {
+          SmartDashboard.putNumber("/PI/Detected Object/ThreadsperSecond", threadCounter/threadCounterTime*1000);
+        } else {
+          SmartDashboard.putNumber("/Pi/Detected Object/ThreadsperSecond", -1); //prints -1 to debug
+        }
+        SmartDashboard.putNumber("/PI/Detected Object/MilliSecondsPerThread", elapsedThreadTime);
 
          //reset counter every 100 cycles
          if (threadCounter > 100){
