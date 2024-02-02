@@ -101,8 +101,7 @@ public final class Main {
 
   private static int threadCounter = 0;
   private static long threadCounterTime = 0;
-  private static long elapsedThreadTime = 0;
-  private static long startTime;
+  private static long threadsPerSecond;
 
   public static int kCenterPixelOffset = 0;  // Adjust for sligtly Off Center Camera.  Positive moves the C
   public static int kCameraXFOV = 70; // horixontal FOV of the camera in Degrees
@@ -142,10 +141,7 @@ public final class Main {
     if (args.length > 0) {
       configFile = args[0];
     }
-    
-    //initialize counter and timer
-   startTime = System.currentTimeMillis();
-  
+      
     // read configuration
     if (!readConfig()) {
       return;
@@ -181,8 +177,7 @@ public final class Main {
     
         // do something with pipeline results
         Mat currentFrame = pipeline.maskOutput();
-        startTime = System.currentTimeMillis();
-        
+                
         if (!pipeline.filterContoursOutput().isEmpty()) {
               int selectedContourIndex = 0;
               float selectedContourValue = 0;
@@ -248,6 +243,7 @@ public final class Main {
         
 
           // Calculate Threads per Second
+          /**
         threadCounter++;
         elapsedThreadTime = (System.currentTimeMillis() - startTime);
         threadCounterTime = threadCounterTime + elapsedThreadTime;
@@ -266,7 +262,20 @@ public final class Main {
          threadCounter = 0;
          threadCounterTime = 0;
        }
+         **/
+
+         //Calculating Threads per Second method 2, flowchart by Steve
+         threadCounter++;
          
+         if (((long)System.currentTimeMillis()/1000)  > threadCounterTime) {
+          threadsPerSecond = threadCounter;
+          threadCounterTime = ((long)System.currentTimeMillis()/1000);
+          threadCounter = 0;
+         }
+        
+         SmartDashboard.putNumber("/PI/Detected Object/Iterations", threadCounter);
+         SmartDashboard.putNumber("/PI/Detected Object/ThreadCounterTime", threadCounterTime);      
+         SmartDashboard.putNumber("/PI/Detected Object/ThreadsperSecond", threadsPerSecond);
       });
 
       visionThread.start();
@@ -376,6 +385,7 @@ public final class Main {
       return false;
     } else if (teamElement.getClass().getName() != "String" || teamElement.getClass().getName() != "int") {
       parseError("Team number is not of type [String] or [int], check JSON file?");
+
     }
     team = teamElement.getAsInt();
 
