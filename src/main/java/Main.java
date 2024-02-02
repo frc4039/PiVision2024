@@ -176,8 +176,8 @@ public final class Main {
     // start image processing on camera 0 if present
     if (cameras.size() >= 1) {
       VisionThread visionThread = new VisionThread(cameras.get(0),
-  //            new GreenBinGripPL(), pipeline -> {
-            new NoteGripPipeline(), pipeline -> {
+   //           new GreenBinGripPL(), pipeline -> {
+             new NoteGripPipeline(), pipeline -> {
     
         // do something with pipeline results
         Mat currentFrame = pipeline.maskOutput();
@@ -214,60 +214,54 @@ public final class Main {
                 }
                 currentIndex++;
               }
+            }     
+            Rect r = Imgproc.boundingRect(pipeline.filterContoursOutput().get(selectedContourIndex));
       
-              Rect r = Imgproc.boundingRect(pipeline.filterContoursOutput().get(selectedContourIndex));
-      
-      
-              int centerX = r.x + (r.width/2);
-              int centerY = r.y + (r.height/2);
-      
+            int centerX = r.x + (r.width/2);
+            int centerY = r.y + (r.height/2);
               
-              Imgproc.rectangle(currentFrame, r, new Scalar(0, 255,0),5);
-              Imgproc.drawContours(currentFrame, pipeline.filterContoursOutput(), selectedContourIndex, new Scalar(255, 0, 0));
+            Imgproc.rectangle(currentFrame, r, new Scalar(0, 255,0),5);
+            Imgproc.drawContours(currentFrame, pipeline.filterContoursOutput(), selectedContourIndex, new Scalar(255, 0, 0));
 
-              //Update Network Tables
-              outputStream.putFrame(currentFrame);
-              SmartDashboard.putBoolean("/PiVision/detectedNote", true);
-              SmartDashboard.putNumber("/PiVision/xCenter", centerX);
-              SmartDashboard.putNumber("/PiVision/yCenter", centerY);
-              SmartDashboard.putNumber("/PiVision/width", r.width);
-              SmartDashboard.putNumber("/PiVision/height", r.height);
-              SmartDashboard.putNumber("/PiVision/area", r.height*r.width);
-              SmartDashboard.putNumber("/PiVision/angle", (centerX-kCenterPixelOffset-(kCameraXResolution/2)) * kCameraXResolution/70);
-            }
-            else{
-              Imgproc.putText(currentFrame, "No Note detected!!!", new Point(100, 50), 0, 1.0, new Scalar(0, 0, 255), 3);
-              //Update Shuffleboard
-              outputStream.putFrame(currentFrame);
-              SmartDashboard.putBoolean("/PiVision/detectedNote", false);
-              SmartDashboard.putNumber("/PiVision/xCenter", 0);
-              SmartDashboard.putNumber("/PiVision/yCenter", 0);
-              SmartDashboard.putNumber("/PiVision/width", 0);
-              SmartDashboard.putNumber("/PiVision/height", 0);
-              SmartDashboard.putNumber("/PiVision/area", 0); 
-              SmartDashboard.putNumber("/PiVision/angle", 0);
-            }
-
+            //Update Network Tables
+            outputStream.putFrame(currentFrame);
+            SmartDashboard.putBoolean("/PiVision/detectedNote", true);
+            SmartDashboard.putNumber("/PiVision/xCenter", centerX);
+            SmartDashboard.putNumber("/PiVision/yCenter", centerY);
+            SmartDashboard.putNumber("/PiVision/width", r.width);
+            SmartDashboard.putNumber("/PiVision/height", r.height);
+            SmartDashboard.putNumber("/PiVision/area", r.height*r.width);
+            SmartDashboard.putNumber("/PiVision/angle", (centerX-(kCameraXResolution/2-kCenterPixelOffset)) / (kCameraXResolution/kCameraXFOV) );
           }
+          else{
+            Imgproc.putText(currentFrame, "No Note detected!!!", new Point(100, 50), 0, 1.0, new Scalar(0, 0, 255), 3);
+            //Update Shuffleboard
+            outputStream.putFrame(currentFrame);
+            SmartDashboard.putBoolean("/PiVision/detectedNote", false);
+            SmartDashboard.putNumber("/PiVision/xCenter", 0);
+            SmartDashboard.putNumber("/PiVision/yCenter", 0);
+            SmartDashboard.putNumber("/PiVision/width", 0);
+            SmartDashboard.putNumber("/PiVision/height", 0);
+            SmartDashboard.putNumber("/PiVision/area", 0); 
+            SmartDashboard.putNumber("/PiVision/angle", 0);
+          }
+        
 
-         
+          // Calculate Threads per Second
+          threadCounter++;
+          elapsedThreadTime = (System.currentTimeMillis() - startTime);
+          threadCounterTime = threadCounterTime + elapsedThreadTime;
+          if (threadCounterTime < 1) threadCounterTime = 1;  // fix divide by 0 below  
+          SmartDashboard.putNumber("/PiVision/CurrentTime", System.currentTimeMillis());
+          SmartDashboard.putNumber("/PiVision/Iterations", threadCounter);
+          SmartDashboard.putNumber("/PiVision/ThreadCounterTime", threadCounterTime);
+          SmartDashboard.putNumber("/PiVision/ThreadsperSecond", threadCounter/threadCounterTime*1000);
+          SmartDashboard.putNumber("/PiVision/MilliSecondsPerThread", elapsedThreadTime);
 
-
-        // Calculate Threads per Second
-        threadCounter++;
-        elapsedThreadTime = (System.currentTimeMillis() - startTime);
-        threadCounterTime = threadCounterTime + elapsedThreadTime;
-        if (threadCounterTime < 1) threadCounterTime = 1;  // fix divide by 0 below  
-        SmartDashboard.putNumber("/PI/Detected Object/Iterations", threadCounter);
-        SmartDashboard.putNumber("/PI/Detected Object/ThreadCounterTime", threadCounterTime);
-        SmartDashboard.putNumber("/PI/Detected Object/ThreadsperSecond", threadCounter/threadCounterTime*1000);
-        SmartDashboard.putNumber("/PI/Detected Object/MilliSecondsPerThread", elapsedThreadTime);
-       
-
-       //reset counter every 100 cycles
-       if (threadCounter > 100){
-        threadCounter = 0;
-        threadCounterTime = 0;
+         //reset counter every 100 cycles
+         if (threadCounter > 100){
+         threadCounter = 0;
+         threadCounterTime = 0;
        }
          
       });
