@@ -299,7 +299,7 @@ public final class Main {
     // name
     JsonElement nameElement = config.get("name");
     if (nameElement == null) {
-      parseError("could not read camera name");
+      parseError("Could not read camera name, check JSON file?");
       return false;
     }
     cam.name = nameElement.getAsString();
@@ -307,7 +307,8 @@ public final class Main {
     // path
     JsonElement pathElement = config.get("path");
     if (pathElement == null) {
-      parseError("camera '" + cam.name + "': could not read path");
+      //parseError("camera '" + cam.name + "': could not read path");
+      parseError("Could not read path to camera [ " + cam.name + " ], is it plugged in?");
       return false;
     }
     cam.path = pathElement.getAsString();
@@ -357,13 +358,13 @@ public final class Main {
     try {
       top = new JsonParser().parse(Files.newBufferedReader(Paths.get(configFile)));
     } catch (IOException ex) {
-      System.err.println("could not open '" + configFile + "': " + ex);
+      System.err.println("Could not open configuration file [" + configFile + "]: " + ex);
       return false;
     }
 
     // top level must be an object
     if (!top.isJsonObject()) {
-      parseError("must be JSON object");
+      parseError("Top level must be JSON object");
       return false;
     }
     JsonObject obj = top.getAsJsonObject();
@@ -371,8 +372,10 @@ public final class Main {
     // team number
     JsonElement teamElement = obj.get("team");
     if (teamElement == null) {
-      parseError("could not read team number");
+      parseError("Team number seems to not exist, check JSON file?");
       return false;
+    } else if (teamElement.getClass().getName() != "String" || teamElement.getClass().getName() != "int") {
+      parseError("Team number is not of type [String] or [int], check JSON file?");
     }
     team = teamElement.getAsInt();
 
@@ -384,27 +387,29 @@ public final class Main {
       } else if ("server".equalsIgnoreCase(str)) {
         server = true;
       } else {
-        parseError("could not understand ntmode value '" + str + "'");
+        parseError("Could not understand ntmode value [" + str + "], it should be either [client] or [server]. If you do not intend to use ntmode, remove the key from the JSON file.");
       }
     }
 
     // cameras
     JsonElement camerasElement = obj.get("cameras");
     if (camerasElement == null) {
-      parseError("could not read cameras");
+      parseError("JSON file does not seem to have any cameras? Check for typos and/or check whether key [cameras] is included");
       return false;
     }
     JsonArray cameras = camerasElement.getAsJsonArray();
     for (JsonElement camera : cameras) {
       if (!readCameraConfig(camera.getAsJsonObject())) {
+        parseError("Camera [" + camera.getAsJsonObject() + "] not found, skipping..."); //a bit scuffed, may not work
         return false;
-      }
+      } 
     }
 
     if (obj.has("switched cameras")) {
       JsonArray switchedCameras = obj.get("switched cameras").getAsJsonArray();
       for (JsonElement camera : switchedCameras) {
         if (!readSwitchedCameraConfig(camera.getAsJsonObject())) {
+          parseError("Switched Camera [" + camera.getAsJsonObject() + "] not found, skipping"); //same as line 403
           return false;
         }
       }
