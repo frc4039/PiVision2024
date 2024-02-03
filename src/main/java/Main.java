@@ -226,7 +226,7 @@ public final class Main {
             SmartDashboard.putNumber("/PiVision/width", r.width);
             SmartDashboard.putNumber("/PiVision/height", r.height);
             SmartDashboard.putNumber("/PiVision/area", r.height*r.width);
-            SmartDashboard.putNumber("/PiVision/angle", (centerX-(kCameraXResolution/2-kCenterPixelOffset)) / (kCameraXResolution/kCameraXFOV) );
+            SmartDashboard.putNumber("/PiVision/angle", (centerX-((float)(kCameraXResolution/2-kCenterPixelOffset))) / (kCameraXResolution/kCameraXFOV) );
           }
           else{
             Imgproc.putText(currentFrame, "No Note detected!!!", new Point(100, 50), 0, 1.0, new Scalar(0, 0, 255), 3);
