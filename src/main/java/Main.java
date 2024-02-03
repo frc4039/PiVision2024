@@ -228,8 +228,7 @@ public final class Main {
             SmartDashboard.putNumber("/PiVision/width", r.width);
             SmartDashboard.putNumber("/PiVision/height", r.height);
             SmartDashboard.putNumber("/PiVision/area", r.height*r.width);
-            SmartDashboard.putNumber("/PiVision/angle", (centerX-(kCameraXResolution/2-kCenterPixelOffset)) / (kCameraXResolution/kCameraXFOV) );
-            //nttable.putValue ("angle", NetworkTableValue.makeFloat(centerX-(kCameraXResolution/2-kCenterPixelOffset) / (kCameraXResolution/kCameraXFOV)));
+            SmartDashboard.putNumber("/PiVision/angle", (centerX-((float)(kCameraXResolution/2-kCenterPixelOffset))) / (kCameraXResolution/kCameraXFOV) );
           }
           else{
             Imgproc.putText(currentFrame, "No Note detected!!!", new Point(30, 30), 0, 0.75, new Scalar(0, 0, 255), 2);
