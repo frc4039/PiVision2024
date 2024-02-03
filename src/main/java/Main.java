@@ -105,7 +105,7 @@ public final class Main {
 
   public static int kCenterPixelOffset = 0;  // Adjust for sligtly Off Center Camera.  Positive moves the C
   public static int kCameraXFOV = 70; // horixontal FOV of the camera in Degrees
-  public static int kCameraXResolution = 640; // horizontal resolution of image in pixels
+  public static int kCameraXResolution = 320; // horizontal resolution of image in pixels
   
   private static enum detectionMethodEnum {
     LOWEST,
@@ -157,7 +157,9 @@ public final class Main {
       ntinst.startClient4("wpilibpi");
       ntinst.setServerTeam(team);
       ntinst.startDSClient();
+   
     }
+    //NetworkTable nttable = ntinst.getTable("PiVision");
 
     // start cameras
     for (CameraConfig config : cameraConfigs) {
@@ -168,11 +170,11 @@ public final class Main {
     for (SwitchedCameraConfig config : switchedCameraConfigs) {
       startSwitchedCamera(config);
     }
-    CvSource outputStream = CameraServer.putVideo("DetectedObjectFeed", 320, 240);
+    CvSource outputStream = CameraServer.putVideo("DriverFeed", 240, 180);
     // start image processing on camera 0 if present
     if (cameras.size() >= 1) {
       VisionThread visionThread = new VisionThread(cameras.get(0),
-   //           new GreenBinGripPL(), pipeline -> {
+   //          new GreenBinGripPL(), pipeline -> {
              new NoteGripPipeline(), pipeline -> {
     
         // do something with pipeline results
@@ -227,9 +229,10 @@ public final class Main {
             SmartDashboard.putNumber("/PiVision/height", r.height);
             SmartDashboard.putNumber("/PiVision/area", r.height*r.width);
             SmartDashboard.putNumber("/PiVision/angle", (centerX-(kCameraXResolution/2-kCenterPixelOffset)) / (kCameraXResolution/kCameraXFOV) );
+            //nttable.putValue ("angle", NetworkTableValue.makeFloat(centerX-(kCameraXResolution/2-kCenterPixelOffset) / (kCameraXResolution/kCameraXFOV)));
           }
           else{
-            Imgproc.putText(currentFrame, "No Note detected!!!", new Point(100, 50), 0, 1.0, new Scalar(0, 0, 255), 3);
+            Imgproc.putText(currentFrame, "No Note detected!!!", new Point(30, 30), 0, 0.75, new Scalar(0, 0, 255), 2);
             //Update Shuffleboard
             outputStream.putFrame(currentFrame);
             SmartDashboard.putBoolean("/PiVision/detectedNote", false);
@@ -273,9 +276,9 @@ public final class Main {
           threadCounter = 0;
          }
         
-         SmartDashboard.putNumber("/PI/Detected Object/Iterations", threadCounter);
-         SmartDashboard.putNumber("/PI/Detected Object/ThreadCounterTime", threadCounterTime);      
-         SmartDashboard.putNumber("/PI/Detected Object/ThreadsperSecond", threadsPerSecond);
+         SmartDashboard.putNumber("/PiVision/Iterations", threadCounter);
+         SmartDashboard.putNumber("/PiVision/ThreadCounterTime", threadCounterTime);      
+         SmartDashboard.putNumber("/PiVision/ThreadsperSecond", threadsPerSecond);
       });
 
       visionThread.start();
