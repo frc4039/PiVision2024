@@ -21,12 +21,12 @@ import edu.wpi.first.cscore.MjpegServer;
 import edu.wpi.first.cscore.UsbCamera;
 import edu.wpi.first.cscore.CvSource;
 import edu.wpi.first.cscore.VideoSource;
+import edu.wpi.first.networktables.BooleanPublisher;
+import edu.wpi.first.networktables.DoublePublisher;
+import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableEvent;
 import edu.wpi.first.networktables.NetworkTableInstance;
-import edu.wpi.first.vision.VisionPipeline;
 import edu.wpi.first.vision.VisionThread;
-import edu.wpi.first.wpilibj.Timer;
-import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfPoint;
@@ -34,7 +34,6 @@ import org.opencv.core.Point;
 import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
 import org.opencv.imgproc.Imgproc;
-import org.opencv.imgproc.Moments;
 
 /*
    JSON format:
@@ -104,8 +103,36 @@ public final class Main {
 
   private static int threadCounter = 0;
   private static long threadCounterTime = 0;
-  private static long elapsedThreadTime = 0;
-  private static long startTime;
+  private static long threadsPerSecond;
+
+  public static int kCenterPixelOffset = 0;  // Adjust for sligtly Off Center Camera.  Positive moves the C
+  public static int kCameraXFOV = 70; // horixontal FOV of the camera in Degrees
+  public static int kCameraXResolution = 320; // horizontal resolution of image in pixels
+
+  public static boolean kSimulatorMode = true; // Use Robot Simulator
+  public static String kSimulatorHost = "Dads_Laptop"; // Use Robot Simulator
+
+  //Network Table Publishers
+  static BooleanPublisher pubDetectedNote;
+  static DoublePublisher pubXCenter;
+  static DoublePublisher pubYCenter;
+  static DoublePublisher pubWidth;
+  static DoublePublisher pubHeight;
+  static DoublePublisher pubAngle;
+  static DoublePublisher pubThreadCounter;
+  static DoublePublisher pubThreadCounterTime;      
+  static DoublePublisher pubThreadsPerSecond;
+  
+  private static enum detectionMethodEnum {
+    LOWEST,
+    LARGEST
+    //add more in future if needed
+  };
+
+  // Set the Method to choose the Object returned.
+  // LOWEST returns the Object with teh smallest Y Center
+  // LARGEST returns teh Object with the Largest Area
+  private static detectionMethodEnum detectionMethod = detectionMethodEnum.LOWEST;
 
 
   private Main() {
@@ -130,10 +157,7 @@ public final class Main {
     if (args.length > 0) {
       configFile = args[0];
     }
-    
-    //initialize counter and timer
-   startTime = System.currentTimeMillis();
-  
+      
     // read configuration
     if (!readConfig()) {
       return;
@@ -147,9 +171,29 @@ public final class Main {
     } else {
       System.out.println("Setting up NetworkTables client for team " + team);
       ntinst.startClient4("wpilibpi");
-      ntinst.setServerTeam(team);
+      
+      if (!kSimulatorMode) {
+        ntinst.setServerTeam(team);
+      }
+      else{
+        ntinst.setServer(kSimulatorHost, NetworkTableInstance.kDefaultPort4);
+      }
+
       ntinst.startDSClient();
+   
     }
+    NetworkTable piVisionTable = ntinst.getTable("PiVision");
+
+    // Setup Network Table Publisher Topics
+    pubDetectedNote = piVisionTable.getBooleanTopic("DetectedNote").publish();
+    pubXCenter = piVisionTable.getDoubleTopic("XCenter").publish();
+    pubYCenter = piVisionTable.getDoubleTopic("YCenter").publish();
+    pubWidth = piVisionTable.getDoubleTopic("Width").publish();
+    pubHeight = piVisionTable.getDoubleTopic("Height").publish();
+    pubAngle = piVisionTable.getDoubleTopic("Angle").publish();
+    pubThreadCounter = piVisionTable.getDoubleTopic("ThreadCounter").publish();
+    pubThreadCounterTime  = piVisionTable.getDoubleTopic("ThreadCounterTime").publish();      
+    pubThreadsPerSecond  = piVisionTable.getDoubleTopic("ThreadsPerSecond").publish();
 
     // start cameras
     for (CameraConfig config : cameraConfigs) {
@@ -160,88 +204,105 @@ public final class Main {
     for (SwitchedCameraConfig config : switchedCameraConfigs) {
       startSwitchedCamera(config);
     }
-    CvSource outputStream = CameraServer.putVideo("DetectedObjectFeed", 320, 240);
+    
+    // Start Driver Feed
+    CvSource outputStream = CameraServer.putVideo("DriverFeed", 240, 180);
+
     // start image processing on camera 0 if present
     if (cameras.size() >= 1) {
       VisionThread visionThread = new VisionThread(cameras.get(0),
-  //            new GreenBinGripPL(), pipeline -> {
-            new NoteGripPipeline(), pipeline -> {
+   //          new GreenBinGripPL(), pipeline -> {
+             new NoteGripPipeline(), pipeline -> {
     
-        // do something with pipeline results
+        // grab current frame from Pipeline for futre processing and feed to drivers
         Mat currentFrame = pipeline.maskOutput();
-        startTime = System.currentTimeMillis();
-        
+                
+        // continue with Image processing only if Pipline detects notes
         if (!pipeline.filterContoursOutput().isEmpty()) {
-
-          int largestContourIndex = 0;
-          float largestContourArea = 0;
-          int currentIndex = 0;
-  
-          // Loop through all detected object contours and select the one with the largest area as our main target
-          for (MatOfPoint matOfPoint : pipeline.filterContoursOutput()) {
-            int currentContourArea = Imgproc.boundingRect(matOfPoint).height * Imgproc.boundingRect(matOfPoint).width;
-  
-            if (currentContourArea > largestContourArea) {
-              largestContourIndex = currentIndex;
-              largestContourArea = currentContourArea;
-            }
-            currentIndex++;
-          }
-  
-          Rect r = Imgproc.boundingRect(pipeline.filterContoursOutput().get(largestContourIndex));
-  
-  
-          int centerX = r.x + (r.width/2);
-          int centerY = r.y + (r.height/2);
-   
+              int selectedContourIndex = 0;
+              float selectedContourValue = 0;
+              int currentIndex = 0;
           
-          Imgproc.rectangle(currentFrame, r, new Scalar(0, 255,0),5);
-          Imgproc.drawContours(currentFrame, pipeline.filterContoursOutput(), largestContourIndex, new Scalar(255, 0, 0));
+          // LARGEST dectect mode slects the object with the largest area of all the detected Objects.
+          if (detectionMethod == detectionMethodEnum.LARGEST){
+             
+              // Loop through all detected object contours and select the one with the largest area as our main target
+              for (MatOfPoint matOfPoint : pipeline.filterContoursOutput()) {
+                int currentContourArea = Imgproc.boundingRect(matOfPoint).height * Imgproc.boundingRect(matOfPoint).width;
+                if (currentContourArea > selectedContourValue) {
+                  selectedContourIndex = currentIndex;
+                  selectedContourValue = currentContourArea;
+                }
+                currentIndex++;
+              }
+            }
+            // LOWEST dection mode selects the object with the lowest Y center
+            else if (detectionMethod == detectionMethodEnum.LOWEST) {
+              selectedContourIndex = 0;
+              selectedContourValue = 8000;
+              currentIndex = 0;
+              // Loop through all detected object contours and select the one with the smallest Y co-ordinate as our main target
+              for (MatOfPoint matOfPoint : pipeline.filterContoursOutput()) {
+                int currentContourYValue = Imgproc.boundingRect(matOfPoint).y;
+      
+                if (currentContourYValue > selectedContourValue) {
+                  selectedContourIndex = currentIndex;
+                  selectedContourValue = currentContourYValue;
+                }
+                currentIndex++;
+              }
+            }     
 
-                  //Update Shuffleboard
-        outputStream.putFrame(currentFrame);
-        SmartDashboard.putNumber("/PI/Detected Object/xCenter", centerX);
-        SmartDashboard.putNumber("/PI/Detected Object/yCenter", centerY);
-        SmartDashboard.putNumber("/PI/Detected Object/width", r.width);
-        SmartDashboard.putNumber("/PI/Detected Object/height", r.height);
-        SmartDashboard.putNumber("/PI/Detected Object/area", r.height*r.width);
-        SmartDashboard.putNumber("/PI/Detected Object/Angle", -1);
+            
+            Rect r = Imgproc.boundingRect(pipeline.filterContoursOutput().get(selectedContourIndex));
+      
+            int centerX = r.x + (r.width/2);
+            int centerY = r.y + (r.height/2);
+              
+            Imgproc.rectangle(currentFrame, r, new Scalar(0, 255,0),5);
+            Imgproc.drawContours(currentFrame, pipeline.filterContoursOutput(), selectedContourIndex, new Scalar(255, 0, 0));
 
-        } 
-        else{
-          Imgproc.putText(currentFrame, "No Note detected!!!", new Point(100, 50), 0, 1.0, new Scalar(0, 0, 255), 3);
-        //Update Shuffleboard
-        outputStream.putFrame(currentFrame);
-        SmartDashboard.putNumber("/PI/Detected Object/xCenter", -1);
-        SmartDashboard.putNumber("/PI/Detected Object/yCenter", -1);
-        SmartDashboard.putNumber("/PI/Detected Object/width", -1);
-        SmartDashboard.putNumber("/PI/Detected Object/height", -1);
-        SmartDashboard.putNumber("/PI/Detected Object/area", -1);
-        SmartDashboard.putNumber("/PI/Detected Object/Angle", -1);
+            //Update Network Tables
+            outputStream.putFrame(currentFrame);
+            pubDetectedNote.set(true);
+            pubXCenter.set(centerX);
+            pubYCenter.set(centerY);
+            pubWidth.set(r.width);
+            pubHeight.set(r.height);
+            pubAngle.set(((float)centerX-((float)(kCameraXResolution/2-kCenterPixelOffset))) / ((float)kCameraXResolution/(float)kCameraXFOV));
+          }
+          else{
+            Imgproc.putText(currentFrame, "No Note detected!!!", new Point(30, 30), 0, 0.75, new Scalar(0, 0, 255), 2);
+            // Update Shuffleboard
+            outputStream.putFrame(currentFrame);
+            pubDetectedNote.set(false);
+            pubXCenter.set(0);
+            pubYCenter.set(0);
+            pubWidth.set(0);
+            pubHeight.set(0);
+            pubAngle.set(0);
+          }
+                 
+         //Calculating Threads per Second method 2, flowchart by Steve
+         threadCounter++;
+        
+        if (((long)System.currentTimeMillis()/1000)  > threadCounterTime) {
+          threadsPerSecond = threadCounter;
+          threadCounterTime = ((long)System.currentTimeMillis()/1000);
+          threadCounter = 0;
         }
+        
+        // Publish Performace Stats to Network Tables
+        pubThreadCounter.set(threadCounter);
+        pubThreadCounterTime.set(threadCounterTime);      
+        pubThreadsPerSecond.set(threadsPerSecond);
+        
+        // Update network tables now - Don't wait for the 100ms cycle.
+        ntinst.flush();
 
-
-        // Calculate Threads per Second
-        threadCounter++;
-        elapsedThreadTime = (System.currentTimeMillis() - startTime);
-        threadCounterTime = threadCounterTime + elapsedThreadTime;
-        if (threadCounterTime < 1) elapsedThreadTime = 1;  // fix divide by 0 below  
-        SmartDashboard.putNumber("/PI/Detected Object/Iterations", threadCounter);
-        SmartDashboard.putNumber("/PI/Detected Object/ThreadCounterTime", threadCounterTime);
-        SmartDashboard.putNumber("/PI/Detected Object/ThreadsperSecond", threadCounter/threadCounterTime*1000);
-        SmartDashboard.putNumber("/PI/Detected Object/MilliSecondsPerThread", elapsedThreadTime);
-       
-
-       //reset counter every 100 cycles
-       if (threadCounter > 100){
-        threadCounter = 0;
-        threadCounterTime = 0;
-       }
-         
-      });
+        });
 
       visionThread.start();
-     
     }
 
     // loop forever
@@ -270,7 +331,7 @@ public final class Main {
     // name
     JsonElement nameElement = config.get("name");
     if (nameElement == null) {
-      parseError("could not read camera name");
+      parseError("Could not read camera name, check JSON file?");
       return false;
     }
     cam.name = nameElement.getAsString();
@@ -278,7 +339,8 @@ public final class Main {
     // path
     JsonElement pathElement = config.get("path");
     if (pathElement == null) {
-      parseError("camera '" + cam.name + "': could not read path");
+      //parseError("camera '" + cam.name + "': could not read path");
+      parseError("Could not read path to camera [ " + cam.name + " ], is it plugged in?");
       return false;
     }
     cam.path = pathElement.getAsString();
@@ -328,13 +390,13 @@ public final class Main {
     try {
       top = new JsonParser().parse(Files.newBufferedReader(Paths.get(configFile)));
     } catch (IOException ex) {
-      System.err.println("could not open '" + configFile + "': " + ex);
+      System.err.println("Could not open configuration file [" + configFile + "]: " + ex);
       return false;
     }
 
     // top level must be an object
     if (!top.isJsonObject()) {
-      parseError("must be JSON object");
+      parseError("Top level must be JSON object");
       return false;
     }
     JsonObject obj = top.getAsJsonObject();
@@ -342,8 +404,11 @@ public final class Main {
     // team number
     JsonElement teamElement = obj.get("team");
     if (teamElement == null) {
-      parseError("could not read team number");
+      parseError("Team number seems to not exist, check JSON file?");
       return false;
+    } else if (teamElement.getClass().getName() != "String" || teamElement.getClass().getName() != "int") {
+      parseError("Team number is not of type [String] or [int], check JSON file?");
+
     }
     team = teamElement.getAsInt();
 
@@ -355,27 +420,29 @@ public final class Main {
       } else if ("server".equalsIgnoreCase(str)) {
         server = true;
       } else {
-        parseError("could not understand ntmode value '" + str + "'");
+        parseError("Could not understand ntmode value [" + str + "], it should be either [client] or [server]. If you do not intend to use ntmode, remove the key from the JSON file.");
       }
     }
 
     // cameras
     JsonElement camerasElement = obj.get("cameras");
     if (camerasElement == null) {
-      parseError("could not read cameras");
+      parseError("JSON file does not seem to have any cameras? Check for typos and/or check whether key [cameras] is included");
       return false;
     }
     JsonArray cameras = camerasElement.getAsJsonArray();
     for (JsonElement camera : cameras) {
       if (!readCameraConfig(camera.getAsJsonObject())) {
+        parseError("Camera [" + camera.getAsJsonObject() + "] not found, skipping..."); //a bit scuffed, may not work
         return false;
-      }
+      } 
     }
 
     if (obj.has("switched cameras")) {
       JsonArray switchedCameras = obj.get("switched cameras").getAsJsonArray();
       for (JsonElement camera : switchedCameras) {
         if (!readSwitchedCameraConfig(camera.getAsJsonObject())) {
+          parseError("Switched Camera [" + camera.getAsJsonObject() + "] not found, skipping"); //same as line 403
           return false;
         }
       }
