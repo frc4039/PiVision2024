@@ -21,10 +21,12 @@ import edu.wpi.first.cscore.MjpegServer;
 import edu.wpi.first.cscore.UsbCamera;
 import edu.wpi.first.cscore.CvSource;
 import edu.wpi.first.cscore.VideoSource;
+import edu.wpi.first.networktables.BooleanPublisher;
+import edu.wpi.first.networktables.DoublePublisher;
+import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableEvent;
 import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.vision.VisionThread;
-import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfPoint;
@@ -106,6 +108,20 @@ public final class Main {
   public static int kCenterPixelOffset = 0;  // Adjust for sligtly Off Center Camera.  Positive moves the C
   public static int kCameraXFOV = 70; // horixontal FOV of the camera in Degrees
   public static int kCameraXResolution = 320; // horizontal resolution of image in pixels
+
+  public static boolean kSimulatorMode = true; // Use Robot Simulator
+  public static String kSimulatorHost = "Dads_Laptop"; // Use Robot Simulator
+
+  //Network Table Publishers
+  static BooleanPublisher pubDetectedNote;
+  static DoublePublisher pubXCenter;
+  static DoublePublisher pubYCenter;
+  static DoublePublisher pubWidth;
+  static DoublePublisher pubHeight;
+  static DoublePublisher pubAngle;
+  static DoublePublisher pubThreadCounter;
+  static DoublePublisher pubThreadCounterTime;      
+  static DoublePublisher pubThreadsPerSecond;
   
   private static enum detectionMethodEnum {
     LOWEST,
@@ -155,11 +171,29 @@ public final class Main {
     } else {
       System.out.println("Setting up NetworkTables client for team " + team);
       ntinst.startClient4("wpilibpi");
-      ntinst.setServerTeam(team);
+      
+      if (!kSimulatorMode) {
+        ntinst.setServerTeam(team);
+      }
+      else{
+        ntinst.setServer(kSimulatorHost, NetworkTableInstance.kDefaultPort4);
+      }
+
       ntinst.startDSClient();
    
     }
-    //NetworkTable nttable = ntinst.getTable("PiVision");
+    NetworkTable piVisionTable = ntinst.getTable("PiVision");
+
+    // Setup Network Table Publisher Topics
+    pubDetectedNote = piVisionTable.getBooleanTopic("DetectedNote").publish();
+    pubXCenter = piVisionTable.getDoubleTopic("XCenter").publish();
+    pubYCenter = piVisionTable.getDoubleTopic("YCenter").publish();
+    pubWidth = piVisionTable.getDoubleTopic("Width").publish();
+    pubHeight = piVisionTable.getDoubleTopic("Height").publish();
+    pubAngle = piVisionTable.getDoubleTopic("Angle").publish();
+    pubThreadCounter = piVisionTable.getDoubleTopic("ThreadCounter").publish();
+    pubThreadCounterTime  = piVisionTable.getDoubleTopic("ThreadCounterTime").publish();      
+    pubThreadsPerSecond  = piVisionTable.getDoubleTopic("ThreadsPerSecond").publish();
 
     // start cameras
     for (CameraConfig config : cameraConfigs) {
@@ -170,21 +204,26 @@ public final class Main {
     for (SwitchedCameraConfig config : switchedCameraConfigs) {
       startSwitchedCamera(config);
     }
+    
+    // Start Driver Feed
     CvSource outputStream = CameraServer.putVideo("DriverFeed", 240, 180);
+
     // start image processing on camera 0 if present
     if (cameras.size() >= 1) {
       VisionThread visionThread = new VisionThread(cameras.get(0),
    //          new GreenBinGripPL(), pipeline -> {
              new NoteGripPipeline(), pipeline -> {
     
-        // do something with pipeline results
+        // grab current frame from Pipeline for futre processing and feed to drivers
         Mat currentFrame = pipeline.maskOutput();
                 
+        // continue with Image processing only if Pipline detects notes
         if (!pipeline.filterContoursOutput().isEmpty()) {
               int selectedContourIndex = 0;
               float selectedContourValue = 0;
               int currentIndex = 0;
-              
+          
+          // LARGEST dectect mode slects the object with the largest area of all the detected Objects.
           if (detectionMethod == detectionMethodEnum.LARGEST){
              
               // Loop through all detected object contours and select the one with the largest area as our main target
@@ -197,6 +236,7 @@ public final class Main {
                 currentIndex++;
               }
             }
+            // LOWEST dection mode selects the object with the lowest Y center
             else if (detectionMethod == detectionMethodEnum.LOWEST) {
               selectedContourIndex = 0;
               selectedContourValue = 8000;
@@ -212,6 +252,8 @@ public final class Main {
                 currentIndex++;
               }
             }     
+
+            
             Rect r = Imgproc.boundingRect(pipeline.filterContoursOutput().get(selectedContourIndex));
       
             int centerX = r.x + (r.width/2);
@@ -222,66 +264,45 @@ public final class Main {
 
             //Update Network Tables
             outputStream.putFrame(currentFrame);
-            SmartDashboard.putBoolean("/PiVision/detectedNote", true);
-            SmartDashboard.putNumber("/PiVision/xCenter", centerX);
-            SmartDashboard.putNumber("/PiVision/yCenter", centerY);
-            SmartDashboard.putNumber("/PiVision/width", r.width);
-            SmartDashboard.putNumber("/PiVision/height", r.height);
-            SmartDashboard.putNumber("/PiVision/area", r.height*r.width);
-            SmartDashboard.putNumber("/PiVision/angle", (centerX-((float)(kCameraXResolution/2-kCenterPixelOffset))) / (kCameraXResolution/kCameraXFOV) );
+            pubDetectedNote.set(true);
+            pubXCenter.set(centerX);
+            pubYCenter.set(centerY);
+            pubWidth.set(r.width);
+            pubHeight.set(r.height);
+            pubAngle.set(((float)centerX-((float)(kCameraXResolution/2-kCenterPixelOffset))) / ((float)kCameraXResolution/(float)kCameraXFOV));
           }
           else{
             Imgproc.putText(currentFrame, "No Note detected!!!", new Point(30, 30), 0, 0.75, new Scalar(0, 0, 255), 2);
-            //Update Shuffleboard
+            // Update Shuffleboard
             outputStream.putFrame(currentFrame);
-            SmartDashboard.putBoolean("/PiVision/detectedNote", false);
-            SmartDashboard.putNumber("/PiVision/xCenter", 0);
-            SmartDashboard.putNumber("/PiVision/yCenter", 0);
-            SmartDashboard.putNumber("/PiVision/width", 0);
-            SmartDashboard.putNumber("/PiVision/height", 0);
-            SmartDashboard.putNumber("/PiVision/area", 0); 
-            SmartDashboard.putNumber("/PiVision/angle", 0);
+            pubDetectedNote.set(false);
+            pubXCenter.set(0);
+            pubYCenter.set(0);
+            pubWidth.set(0);
+            pubHeight.set(0);
+            pubAngle.set(0);
           }
-        
-
-          // Calculate Threads per Second
-          /**
-        threadCounter++;
-        elapsedThreadTime = (System.currentTimeMillis() - startTime);
-        threadCounterTime = threadCounterTime + elapsedThreadTime;
-        if (threadCounterTime < 1) elapsedThreadTime = 1;  // fix divide by 0 below  
-        SmartDashboard.putNumber("/PI/Detected Object/Iterations", threadCounter);
-        SmartDashboard.putNumber("/PI/Detected Object/ThreadCounterTime", threadCounterTime);
-        if (threadCounterTime != 0) {
-          SmartDashboard.putNumber("/PI/Detected Object/ThreadsperSecond", threadCounter/threadCounterTime*1000);
-        } else {
-          SmartDashboard.putNumber("/Pi/Detected Object/ThreadsperSecond", -1); //prints -1 to debug
-        }
-        SmartDashboard.putNumber("/PI/Detected Object/MilliSecondsPerThread", elapsedThreadTime);
-
-         //reset counter every 100 cycles
-         if (threadCounter > 100){
-         threadCounter = 0;
-         threadCounterTime = 0;
-       }
-         **/
-
+                 
          //Calculating Threads per Second method 2, flowchart by Steve
          threadCounter++;
-         
-         if (((long)System.currentTimeMillis()/1000)  > threadCounterTime) {
+        
+        if (((long)System.currentTimeMillis()/1000)  > threadCounterTime) {
           threadsPerSecond = threadCounter;
           threadCounterTime = ((long)System.currentTimeMillis()/1000);
           threadCounter = 0;
-         }
+        }
         
-         SmartDashboard.putNumber("/PiVision/Iterations", threadCounter);
-         SmartDashboard.putNumber("/PiVision/ThreadCounterTime", threadCounterTime);      
-         SmartDashboard.putNumber("/PiVision/ThreadsperSecond", threadsPerSecond);
-      });
+        // Publish Performace Stats to Network Tables
+        pubThreadCounter.set(threadCounter);
+        pubThreadCounterTime.set(threadCounterTime);      
+        pubThreadsPerSecond.set(threadsPerSecond);
+        
+        // Update network tables now - Don't wait for the 100ms cycle.
+        ntinst.flush();
+
+        });
 
       visionThread.start();
-     
     }
 
     // loop forever
