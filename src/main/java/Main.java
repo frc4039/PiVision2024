@@ -33,6 +33,7 @@ import org.opencv.core.MatOfPoint;
 import org.opencv.core.Point;
 import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
+import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 
 /*
@@ -109,7 +110,13 @@ public final class Main {
   public static int kCameraXFOV = 70; // horixontal FOV of the camera in Degrees
   public static int kCameraXResolution = 320; // horizontal resolution of image in pixels
 
-  public static boolean kSimulatorMode = true; // Use Robot Simulator
+  public static int kStreamXResolution = 240; // Output Stream Horizontal resolution of image in pixels
+  public static int kStreamYResolution = 180; // Output Stream Vertical resolution of image in pixels
+  public static int kStreamFPS = 15; // Output Stream Frames/Second
+  public static int kFrameTimer = 1000/kStreamFPS; // Calculated Rate to push Output Frames
+
+  
+  public static boolean kSimulatorMode = false; // Use Robot Simulator
   public static String kSimulatorHost = "Dads_Laptop"; // Use Robot Simulator
 
   //Network Table Publishers
@@ -133,7 +140,7 @@ public final class Main {
   // LOWEST returns the Object with teh smallest Y Center
   // LARGEST returns teh Object with the Largest Area
   private static detectionMethodEnum detectionMethod = detectionMethodEnum.LOWEST;
-
+  private static long lastFrameTime = 0;
 
   private Main() {
     
@@ -154,6 +161,9 @@ public final class Main {
 
   /*** Main ***/
   public static void main(String... args) {
+    Size outputSize = new Size(kStreamXResolution, kStreamYResolution);
+    
+      
     if (args.length > 0) {
       configFile = args[0];
     }
@@ -207,7 +217,7 @@ public final class Main {
     
     // Start Driver Feed
     CvSource outputStream = CameraServer.putVideo("DriverFeed", 240, 180);
-
+        
     // start image processing on camera 0 if present
     if (cameras.size() >= 1) {
       VisionThread visionThread = new VisionThread(cameras.get(0),
@@ -263,7 +273,6 @@ public final class Main {
             Imgproc.drawContours(currentFrame, pipeline.filterContoursOutput(), selectedContourIndex, new Scalar(255, 0, 0));
 
             //Update Network Tables
-            outputStream.putFrame(currentFrame);
             pubDetectedNote.set(true);
             pubXCenter.set(centerX);
             pubYCenter.set(centerY);
@@ -273,8 +282,7 @@ public final class Main {
           }
           else{
             Imgproc.putText(currentFrame, "No Note detected!!!", new Point(30, 30), 0, 0.75, new Scalar(0, 0, 255), 2);
-            // Update Shuffleboard
-            outputStream.putFrame(currentFrame);
+            // Update Network Tables
             pubDetectedNote.set(false);
             pubXCenter.set(0);
             pubYCenter.set(0);
@@ -282,7 +290,18 @@ public final class Main {
             pubHeight.set(0);
             pubAngle.set(0);
           }
-                 
+
+
+          // resize mat and Update Output Stream
+          Mat outputFrame = currentFrame;
+          Imgproc.resize(currentFrame, outputFrame, outputSize);
+          //Only put frame every 10th cycle
+          if ((long)System.currentTimeMillis() - lastFrameTime > kFrameTimer){
+            lastFrameTime = (long)System.currentTimeMillis();
+            outputStream.putFrame(outputFrame);
+
+          } 
+
          //Calculating Threads per Second method 2, flowchart by Steve
          threadCounter++;
         
