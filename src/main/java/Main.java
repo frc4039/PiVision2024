@@ -35,6 +35,7 @@ import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
+import org.opencv.imgproc.Moments;
 
 /*
    JSON format:
@@ -271,6 +272,20 @@ public final class Main {
               
             Imgproc.rectangle(currentFrame, r, new Scalar(0, 255,0),5);
             Imgproc.drawContours(currentFrame, pipeline.filterContoursOutput(), selectedContourIndex, new Scalar(255, 0, 0));
+
+         		// Get the mat of point for the lagest detected contour
+				    MatOfPoint matForMoments = pipeline.convexHullsOutput().get(selectedContourIndex);
+
+				    // Get the moments for the largest contour so that we can figure our where the cube area is concentrated.
+				    // This is needed to check if multiple cubes were detected as one blob.
+				    Moments moments = Imgproc.moments(matForMoments);
+
+				    // Get the center-x and center-y of the contour moment
+				    int momentX = (int)(moments.get_m10() / moments.get_m00());
+				    int momentY = (int)(moments.get_m01() / moments.get_m00());
+
+				    Imgproc.circle(currentFrame, new Point(momentX, momentY), 10, new Scalar(255, 0, 0), 4);
+				    Imgproc.circle(currentFrame, new Point(centerX, centerY), 10, new Scalar(0, 255, 0), 4);
 
             //Update Network Tables
             pubDetectedNote.set(true);
