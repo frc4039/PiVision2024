@@ -109,7 +109,7 @@ public final class Main {
   public static int kCameraXFOV = 70; // horixontal FOV of the camera in Degrees
   public static int kCameraXResolution = 320; // horizontal resolution of image in pixels
 
-  public static boolean kSimulatorMode = true; // Use Robot Simulator
+  public static boolean kSimulatorMode = false; // Use Robot Simulator
   public static String kSimulatorHost = "Dads_Laptop"; // Use Robot Simulator
 
   //Network Table Publishers
